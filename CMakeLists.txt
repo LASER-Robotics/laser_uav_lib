@@ -106,9 +106,14 @@ add_library(attitude_converter SHARED
 target_include_directories(attitude_converter PRIVATE include)
 ament_target_dependencies(attitude_converter ${dependencies})
 
-# ament_export_libraries(attitude_converter)
-# ament_export_targets(attitude_converter)
-# ament_export_dependencies(${dependencies})
+# ========================== Attitude Converter ==========================
+add_library(filter SHARED
+  src/filter/irr_filter.cpp
+  src/filter/notch_filter.cpp
+)
+
+target_include_directories(filter PRIVATE include)
+ament_target_dependencies(filter ${dependencies})
 
 # ========================== Vision (Usa OpenCV e ZBar) ==========================
 add_library(vision SHARED
@@ -142,7 +147,7 @@ ament_target_dependencies(pcl_utils ${pcl_dependencies})
 target_link_libraries(pcl_utils 
   ${PCL_LIBRARIES} 
   ${pcl_conversions_LIBRARIES}
-) # Vincula o PCL
+) 
 
 # ament_export_libraries(pcl_utils)
 # ament_export_targets(pcl_utils
@@ -158,7 +163,7 @@ target_link_libraries(pcl_utils
 
 # Exportação correta dos targets
 install(
-  TARGETS attitude_converter vision pcl_utils
+  TARGETS attitude_converter vision pcl_utils filter
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -189,12 +194,31 @@ install(
 )
 
 
-# Configura testes (se necessário)
+# ========================== Configuração dos Testes ==========================
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  # Encontra o pacote GoogleTest
+  unset(GTest_DIR CACHE)
+  find_package(GTest REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
+
+  include_directories(${GTEST_INCLUDE_DIRS})
+
+  # Adiciona os testes
+  ament_add_gtest(test_filter
+    tests/filter/test_irr_filter.cpp
+  )
+
+  if(TARGET test_filter)
+    target_link_libraries(test_filter
+      filter
+    )
+    ament_target_dependencies(test_filter ${dependencies})
+  endif()
 endif()
 
 

@@ -87,7 +87,7 @@ namespace laser_uav_lib
        * @return A vector of 2D points indicating the positions of the detected QR code boxes (std::vector<cv::Point>).
        */
       /* findQRCode() //{ */
-      std::vector<laser_uav_lib::vision::image_utils::Detected> findQRCode(cv::Mat *image, int erosion_count = 9, int structure_width = 11, int structure_height = 5)
+      std::vector<laser_uav_lib::vision::image_utils::Detected> findQRCode(cv::Mat *image, int erosion_count, int structure_width, int structure_height)
       {
         /* Create a vector of the points to return */
         std::vector<laser_uav_lib::vision::image_utils::Detected> box_detect;
@@ -161,7 +161,7 @@ namespace laser_uav_lib
        * @return A vector of detected barcodes with their data and locations.
        */
       /* findAndReadBarcode() //{ */
-      std::vector<laser_uav_lib::vision::image_utils::Detected> findAndReadBarcode(cv::Mat *image, int erosion_count, int structure_width, int structure_height)
+      std::vector<laser_uav_lib::vision::image_utils::Detected> findBarcode(cv::Mat *image, int erosion_count, int structure_width, int structure_height)
       {
         // Rotate the image 90 degrees clockwise
         // cv::rotate(*image, *image, cv::ROTATE_90_CLOCKWISE);

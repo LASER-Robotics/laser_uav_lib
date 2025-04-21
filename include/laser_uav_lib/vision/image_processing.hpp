@@ -53,7 +53,7 @@ namespace laser_uav_lib
        * @param image The input image (cv::Mat*).
        * @return A vector of points indicating the positions of the detected QR code boxes (laser_uav_lib::vision::image_utils::Detected).
        */
-      std::vector<laser_uav_lib::vision::image_utils::Detected> findQRCode(cv::Mat *image);
+      std::vector<laser_uav_lib::vision::image_utils::Detected> findQRCode(cv::Mat *image, int erosion_count = 9, int structure_width = 11, int structure_height = 5);
 
       /**
        * \brief Function to find and read barcodes in an image.

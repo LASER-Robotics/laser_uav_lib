@@ -201,23 +201,33 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
-  # Encontra o pacote GoogleTest
-  unset(GTest_DIR CACHE)
-  find_package(GTest REQUIRED)
+  # Find GoogleTest
+  find_package(GTest REQUIRED)  # Let CMake find it automatically
   find_package(ament_cmake_gtest REQUIRED)
 
   include_directories(${GTEST_INCLUDE_DIRS})
 
-  # Adiciona os testes
-  ament_add_gtest(test_filter
+  # Add tests
+  ament_add_gtest(test_irr_filter
     tests/filter/test_irr_filter.cpp
   )
 
-  if(TARGET test_filter)
-    target_link_libraries(test_filter
+  ament_add_gtest(test_notch_filter
+    tests/filter/test_notch_filter.cpp
+  )
+
+  if(TARGET test_irr_filter)
+    target_link_libraries(test_irr_filter
       filter
     )
-    ament_target_dependencies(test_filter ${dependencies})
+    ament_target_dependencies(test_irr_filter ${dependencies})
+  endif()
+
+  if(TARGET test_notch_filter)
+    target_link_libraries(test_notch_filter
+      filter
+    )
+    ament_target_dependencies(test_notch_filter ${dependencies})
   endif()
 endif()
 

@@ -26,13 +26,16 @@ namespace laser_uav_lib
         double iterate(const double input);
 
         std::tuple<std::vector<double>, std::vector<double>> getCoeffs();
-        std::vector<double> getBuffer();
+        std::vector<double> getInputBuffer();
+        std::vector<double> getOutputBuffer();
 
     private:
         std::vector<double> a_;
         std::vector<double> b_;
         size_t order_;
         std::vector<double> buffer_;
+        std::vector<double> input_buffer_;
+        std::vector<double> processed_output_buffer_;
         rclcpp::Logger logger_;
     };
 

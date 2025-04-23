@@ -7,9 +7,8 @@ namespace laser_uav_lib
 
     /* IIRFilter constructor //{ */
 
-    IIRFilter::IIRFilter(const std::vector<double> &a_in, const std::vector<double> &b_in,
-                         const rclcpp::Logger &node_logger)
-        : logger_(node_logger)
+    IIRFilter::IIRFilter(const std::vector<double> &a_in, const std::vector<double> &b_in)
+        : logger_(rclcpp::get_logger("IRRFilter"))
     {
 
         a_ = a_in;
@@ -34,8 +33,7 @@ namespace laser_uav_lib
 
     /* IIRFilter constructor //{ */
 
-    IIRFilter::IIRFilter(const rclcpp::Logger &node_logger)
-        : logger_(node_logger)
+    IIRFilter::IIRFilter() : logger_(rclcpp::get_logger("IRRFilter"))
     {
         a_.resize(1, 0.0);
         b_.resize(1, 1.0);

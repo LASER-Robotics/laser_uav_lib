@@ -2,8 +2,8 @@
 namespace laser_uav_lib
 {
 
-    NotchFilter::NotchFilter(const double &sample_rate, const double &f_in, const double &b_in,
-                             const rclcpp::Logger &logger) : logger_(logger)
+    NotchFilter::NotchFilter(const double &sample_rate, const double &f_in, const double &b_in)
+        : logger_(rclcpp::get_logger("NotchFilter"))
     {
 
         double sf = sample_rate;
@@ -114,6 +114,21 @@ namespace laser_uav_lib
     double NotchFilter::iterate(const double &sample_in)
     {
         return filter.get()->iterate(sample_in);
+    }
+
+    // Novo método para acessar os coeficientes do filtro IIR interno
+    std::pair<std::vector<double>, std::vector<double>> NotchFilter::getInternalFilterCoeffs() const
+    {
+        if (filter)
+        {
+            auto coeffs = filter->getCoeffs();
+            return {std::get<0>(coeffs), std::get<1>(coeffs)};
+        }
+        else
+        {
+            // Retornar vetores vazios ou lançar uma exceção se o filtro não foi inicializado
+            return {{}, {}};
+        }
     }
 
 }

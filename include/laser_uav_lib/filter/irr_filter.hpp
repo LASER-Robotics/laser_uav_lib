@@ -19,9 +19,8 @@ namespace laser_uav_lib
          * @param b gains in the feedforward branch, using only this coefficients results in FIR filter
          * @param node_logger Optional ROS2 logger for output messages
          */
-        IIRFilter(const std::vector<double> &a, const std::vector<double> &b,
-                  const rclcpp::Logger &node_logger = rclcpp::get_logger("iir_filter"));
-        IIRFilter(const rclcpp::Logger &node_logger = rclcpp::get_logger("iir_filter"));
+        IIRFilter(const std::vector<double> &a, const std::vector<double> &b);
+        IIRFilter();
 
         double iterate(const double input);
 

@@ -13,10 +13,10 @@ namespace laser_uav_lib
     {
 
     public:
-        NotchFilter(const double &sample_rate, const double &frequency_in, const double &bandwidth_in,
-                    const rclcpp::Logger &logger); // Added logger parameter
+        NotchFilter(const double &sample_rate, const double &frequency_in, const double &bandwidth_in);
 
         double iterate(const double &sample_in); // Changed to const reference
+        std::pair<std::vector<double>, std::vector<double>> getInternalFilterCoeffs() const;
 
     private:
         std::unique_ptr<laser_uav_lib::IIRFilter> filter;

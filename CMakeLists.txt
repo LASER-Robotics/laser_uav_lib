@@ -106,10 +106,11 @@ add_library(attitude_converter SHARED
 target_include_directories(attitude_converter PRIVATE include)
 ament_target_dependencies(attitude_converter ${dependencies})
 
-# ========================== Attitude Converter ==========================
+# ========================== filter =========== ==========================
 add_library(filter SHARED
   src/filter/irr_filter.cpp
   src/filter/notch_filter.cpp
+  src/filter/imu_filter.cpp
 )
 
 target_include_directories(filter PRIVATE include)
@@ -216,6 +217,10 @@ if(BUILD_TESTING)
     tests/filter/test_notch_filter.cpp
   )
 
+  ament_add_gtest(test_imu_filter
+    tests/filter/test_imu_filter.cpp
+  )
+
   if(TARGET test_irr_filter)
     target_link_libraries(test_irr_filter
       filter
@@ -228,6 +233,13 @@ if(BUILD_TESTING)
       filter
     )
     ament_target_dependencies(test_notch_filter ${dependencies})
+  endif()
+
+  if(TARGET test_imu_filter)
+    target_link_libraries(test_imu_filter
+      filter
+    )
+    ament_target_dependencies(test_imu_filter ${dependencies})
   endif()
 endif()
 

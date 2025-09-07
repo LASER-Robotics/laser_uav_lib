@@ -11,92 +11,45 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(image_geometry REQUIRED)
 
 # ========================== Encontra Eigen3 ==========================
 find_package(Eigen3 QUIET)
 if(Eigen3_FOUND)
-message(STATUS "Eigen3 encontrado - versão ${Eigen3_VERSION}")
+  message(STATUS "Eigen3 encontrado - versão ${Eigen3_VERSION}")
 else()
-message(FATAL_ERROR "Eigen3 não encontrado. Instale com: sudo apt install libeigen3-dev")
+  message(FATAL_ERROR "Eigen3 não encontrado. Instale com: sudo apt install libeigen3-dev")
 endif()
 
-# ========================== Encontra OpenCV ==========================
-find_package(OpenCV QUIET)
-if(OpenCV_FOUND)
-message(STATUS "OpenCV encontrado - versão ${OpenCV_VERSION}")
+# ========================== Encontra Autodiff ==========================
+find_package(autodiff QUIET)
+if(autodiff_FOUND)
+    message(STATUS "Autodiff encontrado - versão ${autodiff_VERSION}")
 else()
-message(FATAL_ERROR "OpenCV não encontrado. Instale com: sudo apt install libopencv-dev")
+    message(FATAL_ERROR "Autodiff não encontrado. Instale com: sudo apt install libautodiff-dev")
 endif()
-
-# ========================== Encontra PCL ==========================
-find_package(PCL QUIET)
-if(PCL_FOUND)
-message(STATUS "PCL encontrado - versão ${PCL_VERSION}")
-else()
-message(FATAL_ERROR "PCL não encontrado. Instale com: sudo apt install libpcl-dev")
-endif()
-
-# ========================== Encontra pcl_conversions ==========================
-find_package(pcl_conversions QUIET)
-if(pcl_conversions_FOUND)
-    message(STATUS "pcl_conversions encontrado")
-else()
-    message(FATAL_ERROR "pcl_conversions não encontrado. Instale com: sudo apt install ros-${ROS_DISTRO}-pcl-conversions")
-endif()
-
-# ========================== Encontra ZBar ==========================
-find_package(ZBar QUIET)
-if(NOT ZBar_FOUND)
-    find_library(ZBAR_LIBRARIES NAMES zbar)
-    if(ZBAR_LIBRARIES)
-        set(ZBar_FOUND TRUE)
-        set(ZBAR_INCLUDE_DIRS "/usr/include")
-        message(STATUS "ZBar encontrado via find_library")
-    else()
-        message(FATAL_ERROR "ZBar não encontrado. Instale com: sudo apt install libzbar-dev")
-    endif()
-else()
-    message(STATUS "ZBar encontrado - versão ${ZBar_VERSION}")
-endif()
-
-
 
 # Define as dependências comuns
 set(dependencies
   rclcpp
   std_msgs
   geometry_msgs
+  nav_msgs
+  sensor_msgs
   tf2_ros
   tf2_geometry_msgs
   Eigen3
-)
-
-set(vision_dependencies
-  ${dependencies}  
-  OpenCV
-  ZBar
-  image_geometry
-)
-
-set(pcl_dependencies
-  ${dependencies}
-  PCL
-  pcl_conversions
-  image_geometry
 )
 
 # Inclui diretórios de cabeçalho
 include_directories(
   include
   ${EIGEN3_INCLUDE_DIR}
-  ${OpenCV_INCLUDE_DIRS}  # Diretórios do OpenCV
-  ${PCL_INCLUDE_DIRS}     # Diretórios do PCL
-  ${pcl_conversions_INCLUDE_DIRS} # Diretórios do pcl_conversions
-  ${ZBAR_INCLUDE_DIRS}    # Diretórios do ZBar
-  )
+  ${autodiff_INCLUDE_DIRS} # Diretórios do Autodiff
+)
   
 # ========================== Attitude Converter ==========================
 add_library(attitude_converter SHARED
@@ -106,7 +59,11 @@ add_library(attitude_converter SHARED
 target_include_directories(attitude_converter PRIVATE include)
 ament_target_dependencies(attitude_converter ${dependencies})
 
-# ========================== filter =========== ==========================
+# Export only your attitude_converter library
+ament_export_libraries(attitude_converter)
+ament_export_dependencies(${dependencies})
+
+# ========================== filter ==========================
 add_library(filter SHARED
   src/filter/irr_filter.cpp
   src/filter/notch_filter.cpp
@@ -116,55 +73,33 @@ add_library(filter SHARED
 target_include_directories(filter PRIVATE include)
 ament_target_dependencies(filter ${dependencies})
 
-# ========================== Vision (Usa OpenCV e ZBar) ==========================
-add_library(vision SHARED
-  src/vision/image_utils.cpp
-  src/vision/image_processing.cpp
+# Export only your filter library
+ament_export_libraries(filter)
+ament_export_dependencies(${dependencies})
+
+# ========================== Drone EKF ==========================
+add_library(drone_ekf SHARED
+  src/kalman_filter/drone_ekf/drone_ekf.cpp
+  src/kalman_filter/ekf/ekf.cpp
 )
 
-target_include_directories(vision PRIVATE include)
-ament_target_dependencies(vision ${vision_dependencies})
-target_link_libraries(vision 
-  ${OpenCV_LIBS}    # Vincula o OpenCV
-  ${ZBAR_LIBRARIES} # Vincula o ZBar
-  ${Eigen3_LIBRARIES} # Vincula o Eigen3
+target_include_directories(drone_ekf PRIVATE include)
+ament_target_dependencies(drone_ekf
+  ${dependencies}
+  ${autodiff_LIBRARIES}
 )
 
-# ament_export_libraries(vision)
-# ament_export_targets(vision
-#   ${OpenCV_LIBS}    # Vincula o OpenCV
-#   ${ZBAR_LIBRARIES} # Vincula o ZBar
-#   ${Eigen3_LIBRARIES} # Vincula o Eigen3
-#   )
-# ament_export_dependencies(${vision_dependencies})
-
-# ========================== PCL Utils (Usa PCL) ==========================
-add_library(pcl_utils SHARED
-  src/pcl_utils/pointcloud_utils.cpp
+target_link_libraries(drone_ekf
+  ${Eigen3_LIBRARIES}
+  ${autodiff_LIBRARIES} # Vincula o Autodiff
 )
 
-target_include_directories(pcl_utils PRIVATE include)
-ament_target_dependencies(pcl_utils ${pcl_dependencies})
-target_link_libraries(pcl_utils 
-  ${PCL_LIBRARIES} 
-  ${pcl_conversions_LIBRARIES}
-) 
-
-# ament_export_libraries(pcl_utils)
-# ament_export_targets(pcl_utils
-#   ${PCL_LIBRARIES} 
-#   ${pcl_conversions_LIBRARIES}
-#   )
-# ament_export_dependencies(${pcl_dependencies})
-
+ament_export_libraries(drone_ekf)
+ament_export_dependencies(${dependencies} ${autodiff_LIBRARIES})
 
 # ========================== Instalação das Bibliotecas ==========================
-
-# Exporta a biblioteca attitude_converter para outros pacotes
-
-# Exportação correta dos targets
 install(
-  TARGETS attitude_converter vision pcl_utils filter
+  TARGETS attitude_converter filter drone_ekf
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -172,13 +107,8 @@ install(
   INCLUDES DESTINATION include
 )
 
-# Exporta os targets para outros pacotes
 ament_export_targets(export_${PROJECT_NAME})
-
-# Exporta diretórios de inclusão e dependências
 ament_export_include_directories(include)
-
-# Exporta todas as dependências necessárias
 ament_export_dependencies(
   rclcpp
   std_msgs
@@ -188,12 +118,10 @@ ament_export_dependencies(
   Eigen3
 )
 
-# Instala os cabeçalhos
 install(
   DIRECTORY include/
   DESTINATION include
 )
-
 
 # ========================== Configuração dos Testes ==========================
 if(BUILD_TESTING)
@@ -202,8 +130,7 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
-  # Find GoogleTest
-  find_package(GTest REQUIRED)  # Let CMake find it automatically
+  find_package(GTest REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
 
   include_directories(${GTEST_INCLUDE_DIRS})
@@ -212,37 +139,33 @@ if(BUILD_TESTING)
   ament_add_gtest(test_irr_filter
     tests/filter/test_irr_filter.cpp
   )
+  target_link_libraries(test_irr_filter filter)
+  ament_target_dependencies(test_irr_filter ${dependencies})
 
   ament_add_gtest(test_notch_filter
     tests/filter/test_notch_filter.cpp
   )
+  target_link_libraries(test_notch_filter filter)
+  ament_target_dependencies(test_notch_filter ${dependencies})
 
   ament_add_gtest(test_imu_filter
     tests/filter/test_imu_filter.cpp
   )
-
-  if(TARGET test_irr_filter)
-    target_link_libraries(test_irr_filter
-      filter
-    )
-    ament_target_dependencies(test_irr_filter ${dependencies})
-  endif()
-
-  if(TARGET test_notch_filter)
-    target_link_libraries(test_notch_filter
-      filter
-    )
-    ament_target_dependencies(test_notch_filter ${dependencies})
-  endif()
-
-  if(TARGET test_imu_filter)
-    target_link_libraries(test_imu_filter
-      filter
-    )
-    ament_target_dependencies(test_imu_filter ${dependencies})
-  endif()
+  target_link_libraries(test_imu_filter filter)
+  ament_target_dependencies(test_imu_filter ${dependencies})
+  
+  ament_add_gtest(test_drone_ekf
+    tests/ekf/test_drone_ekf.cpp
+  )
+  target_link_libraries(test_drone_ekf
+    drone_ekf
+    attitude_converter
+  )
+  ament_target_dependencies(test_drone_ekf
+    ${dependencies}
+    ${autodiff_LIBRARIES}
+  )
 endif()
-
 
 # Finaliza a configuração do pacote
 ament_package()

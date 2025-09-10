@@ -1,3 +1,10 @@
+/**
+ * @file drone_ekf.hpp
+ * @brief Definition of the DroneEKF class, an Extended Kalman Filter implementation
+ * for drone state estimation.
+ * @author Wagner Dantas Garcia / Laser UAV Team
+ * @date September 10, 2025
+ */
 #ifndef LASER_UAV_LIB_DRONE_EKF_HPP
 #define LASER_UAV_LIB_DRONE_EKF_HPP
 
@@ -6,13 +13,13 @@
 #include <autodiff/forward/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 
-// Inclui os tipos de mensagem ROS para as medições
+// Include ROS message types for measurements
 #include <geometry_msgs/msg/point.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 
 #include <laser_uav_lib/kalman_filter/ekf/ekf.hpp>
-#include <laser_uav_lib/kalman_filter/kalman_filter.hpp> // Inclui a interface base
+#include <laser_uav_lib/kalman_filter/kalman_filter.hpp> // Include the base interface
 #include <laser_uav_lib/attitude_converter/attitude_converter.hpp>
 
 #include <rclcpp/rclcpp.hpp>
@@ -20,54 +27,56 @@
 #include <string>
 #include <type_traits>
 #include <sstream>
+#include <cmath>
 
 namespace laser_uav_lib
 {
     /**
-     * @brief Namespace que define os índices do vetor de estado para fácil acesso
-     * e legibilidade do código.
+     * @brief Namespace that defines the state vector indices for easy access
+     * and code readability.
      */
     namespace State
     {
         enum
         {
-            PX = 0,  ///< Posição no eixo X do referencial inercial.
-            PY = 1,  ///< Posição no eixo Y do referencial inercial.
-            PZ = 2,  ///< Posição no eixo Z do referencial inercial.
-            QW = 3,  ///< Componente W (real) do quaternião de orientação.
-            QX = 4,  ///< Componente X (i) do quaternião de orientação.
-            QY = 5,  ///< Componente Y (j) do quaternião de orientação.
-            QZ = 6,  ///< Componente Z (k) do quaternião de orientação.
-            VX = 7,  ///< Velocidade linear no eixo X do referencial do CORPO.
-            VY = 8,  ///< Velocidade linear no eixo Y do referencial do CORPO.
-            VZ = 9,  ///< Velocidade linear no eixo Z do referencial do CORPO.
-            WX = 10, ///< Velocidade angular no eixo X do referencial do CORPO (Roll rate).
-            WY = 11, ///< Velocidade angular no eixo Y do referencial do CORPO (Pitch rate).
-            WZ = 12  ///< Velocidade angular no eixo Z do referencial do CORPO (Yaw rate).
+            PX = 0,  ///< Position in the X-axis of the inertial frame [m].
+            PY = 1,  ///< Position in the Y-axis of the inertial frame [m].
+            PZ = 2,  ///< Position in the Z-axis of the inertial frame [m].
+            QW = 3,  ///< W component (real) of the orientation quaternion.
+            QX = 4,  ///< X component (i) of the orientation quaternion.
+            QY = 5,  ///< Y component (j) of the orientation quaternion.
+            QZ = 6,  ///< Z component (k) of the orientation quaternion.
+            VX = 7,  ///< Linear velocity in the X-axis of the BODY frame [m/s].
+            VY = 8,  ///< Linear velocity in the Y-axis of the BODY frame [m/s].
+            VZ = 9,  ///< Linear velocity in the Z-axis of the BODY frame [m/s].
+            WX = 10, ///< Angular velocity in the X-axis of the BODY frame (Roll rate) [rad/s].
+            WY = 11, ///< Angular velocity in the Y-axis of the BODY frame (Pitch rate) [rad/s].
+            WZ = 12  ///< Angular velocity in the Z-axis of the BODY frame (Yaw rate) [rad/s].
         };
     }
 
-    // --- Definição das Dimensões ---
-    constexpr int STATES = 13;       ///< Número total de estados no vetor de estado.
-    constexpr int INPUTS = 4;        ///< Número de entradas de controle (força de cada motor).
-    constexpr int MEASUREMENTS = 13; ///< Número máximo de medições (usado na odometria).
+    // --- Dimension Definitions ---
+    constexpr int STATES = 13;       ///< Total number of states in the state vector.
+    constexpr int INPUTS = 4;        ///< Number of control inputs (thrust of each motor).
+    constexpr int MEASUREMENTS = 13; ///< Maximum number of measurements (used in odometry).
 
     /**
-     * @brief Estrutura para agrupar todas as medições disponíveis em um único passo de tempo.
-     * O uso de std::optional permite que qualquer medição de sensor esteja ausente no passo de correção,
-     * tornando o filtro flexível a falhas ou ausência de sensores.
+     * @brief Structure to group all available measurements in a single time step.
+     * The use of `std::optional` allows any sensor measurement to be absent in the correction step,
+     * making the filter flexible to sensor failures or absences.
      */
     struct MeasurementPackage
     {
-        std::optional<nav_msgs::msg::Odometry> openvins;     ///< Medição de odometria (posição, orientação, velocidades).
-        std::optional<nav_msgs::msg::Odometry> fast_lio;     ///< Medição de odometria (posição, orientação, velocidades).
-        std::optional<nav_msgs::msg::Odometry> px4_odometry; ///< Medição de odometria (posição, orientação, velocidades).
-        std::optional<sensor_msgs::msg::Imu> imu;            ///< Medição de IMU (aceleração, velocidade angular).
-        std::optional<geometry_msgs::msg::Point> gps;        ///< Medição de GPS (posição).
+        std::optional<nav_msgs::msg::Odometry> openvins;     ///< Odometry measurement from OpenVINS.
+        std::optional<nav_msgs::msg::Odometry> fast_lio;     ///< Odometry measurement from Fast-LIO.
+        std::optional<nav_msgs::msg::Odometry> px4_odometry; ///< Odometry measurement from PX4.
+        std::optional<sensor_msgs::msg::Imu> imu;            ///< IMU measurement (acceleration and angular velocity).
+        std::optional<geometry_msgs::msg::Point> gps;        ///< GPS measurement (position only).
     };
 
     /**
-     * @brief Estrutura para os ganhos de ruído do PROCESSO (modelo)
+     * @brief Structure to configure the PROCESS (dynamic model) noise gains.
+     * These values are used to build the process covariance matrix Q.
      */
     struct ProcessNoiseGains
     {
@@ -78,7 +87,8 @@ namespace laser_uav_lib
     };
 
     /**
-     * @brief Estrutura para os ganhos de ruído da MEDIÇÃO (sensores)
+     * @brief Structure to configure the MEASUREMENT (sensor) noise gains.
+     * These values are used to build the measurement covariance matrix R for each sensor.
      */
     struct MeasurementNoiseGains
     {
@@ -90,55 +100,76 @@ namespace laser_uav_lib
     };
 
     /**
-     * @brief Implementação do Filtro de Kalman Estendido (EKF) para um quadrotor.
-     * * Esta classe herda da classe base EKF e a especializa para estimar o estado de
-     * um drone (posição, orientação e velocidades) fundindo dados de múltiplos sensores.
-     * Utiliza diferenciação automática para o cálculo das matrizes Jacobianas,
-     * simplificando a implementação e reduzindo a chance de erros.
+     * @brief Extended Kalman Filter (EKF) implementation for a quadrotor.
+     *
+     * This class inherits from the base `EKF` class and specializes it to estimate
+     * a drone's state (position, orientation, and velocities) by fusing data from multiple sensors.
+     *
+     * @details
+     * A key feature of this implementation is the use of automatic differentiation
+     * (via the `autodiff` library) for calculating the Jacobian matrices. This
+     * simplifies the state transition model implementation and drastically reduces
+     * the likelihood of mathematical errors. The filter is designed to be robust against
+     * sensor failures by using `std::optional` to handle missing measurements.
      */
     class DroneEKF : public EKF<STATES, INPUTS, MEASUREMENTS>
     {
     public:
         /**
-         * @brief Construtor do DroneEKF.
-         * * @param mass A massa do drone em kg.
-         * @param arm_length O comprimento do braço do drone (distância do centro ao motor) em metros.
-         * @param thrust_coeff O coeficiente de empuxo dos motores.
-         * @param torque_coeff O coeficiente de torque dos motores.
-         * @param inertia A matriz 3x3 de inércia do drone.
-         * @param verbosity O nível de log para depuração ("SILENT", "INFO", "DEBUG").
+         * @brief Constructor for the DroneEKF class.
+         *
+         * @param mass The drone's mass in kg.
+         * @param motor_positions The (x,y) positions of the 4 motors in the body frame.
+         * @param thrust_coeff The thrust coefficient of the motors.
+         * @param torque_coeff The torque coefficient of the motors.
+         * @param inertia The 3x3 inertia matrix of the drone.
+         * @param verbosity The logging level for debugging ("SILENT", "INFO", "DEBUG").
          */
-        DroneEKF(const double &mass, const double &arm_length, const double &thrust_coeff, const double &torque_coeff, const Eigen::Matrix3d &inertia, const std::string &verbosity = "INFO");
+        DroneEKF(const double &mass, const Eigen::Matrix<double, 4, 2> &motor_positions, const double &thrust_coeff, const double &torque_coeff, const Eigen::Matrix3d &inertia, const std::string &verbosity = "INFO");
 
+        /**
+         * @brief Default destructor.
+         */
         ~DroneEKF() = default;
 
         /**
-         * @brief Executa o passo de predição do EKF.
-         * * Projeta o estado atual e a covariância para o próximo passo de tempo,
-         * com base no modelo de movimento do drone e nas entradas de controle.
-         * * @param u O vetor de controle (forças dos 4 motores).
-         * @param dt O intervalo de tempo (delta t) desde a última predição, em segundos.
+         * @brief Executes the EKF prediction step.
+         *
+         * Projects the current state and covariance to the next time step,
+         * based on the drone's motion model and the control inputs.
+         *
+         * @param u The control vector (forces of the 4 motors).
+         * @param dt The time interval (delta t) since the last prediction, in seconds.
          */
         void predict(const Eigen::Matrix<double, INPUTS, 1> &u, double dt) override;
 
         /**
-         * @brief Executa o passo de correção do EKF usando as medições disponíveis.
-         * * Este método atua como um despachante, chamando os métodos de correção
-         * específicos para cada sensor presente no `MeasurementPackage`.
-         * * @param measurements Um pacote contendo os dados dos sensores disponíveis.
+         * @brief Executes the EKF correction step using the available measurements.
+         *
+         * This method acts as a dispatcher, calling the specific correction methods
+         * for each sensor present in the `MeasurementPackage`.
+         *
+         * @param measurements A package containing the available sensor data for this time step.
          */
         void correct(const MeasurementPackage &measurements);
 
-        // A sobrecarga do método 'correct' da classe base é necessária, mesmo que não seja usada diretamente.
+        /**
+         * @brief Overload of the base class's correction method.
+         * @note This implementation is not used directly. The correction is handled by the
+         * method that accepts a `MeasurementPackage`. This function exists to satisfy the
+         * `EKF` base class interface.
+         * @param z Generic measurement vector (not used).
+         */
         void correct(const Eigen::Matrix<double, MEASUREMENTS, 1> &z) override
         {
-            // Esta implementação pode ser deixada vazia ou lançar um erro,
-            // já que a correção é feita pelo método que aceita MeasurementPackage.
+            // This implementation can be left empty or throw an error,
+            // since the correction is handled by the method accepting MeasurementPackage.
+            (void)z; // Avoid unused variable warning.
         }
 
         /**
-         * @brief Reseta o estado e a covariância do filtro para os valores iniciais.
-         * Útil para reiniciar a estimativa após uma falha ou quando o drone está em um estado conhecido.
+         * @brief Resets the filter's state and covariance to their initial values.
+         * Useful for re-initializing the estimate after a failure or when the drone is in a known state.
          */
         void reset();
 
@@ -147,101 +178,118 @@ namespace laser_uav_lib
         const Eigen::Matrix<double, STATES, STATES> &get_covariance() const override { return P_; }
 
         /**
-         * @brief Define a matriz de ruído do processo (Q).
-         * @param Q A nova matriz de covariância do ruído do processo.
+         * @brief Sets the process noise covariance matrix (Q).
+         * @param Q The new process noise covariance matrix.
          */
         void set_process_noise(const Eigen::Matrix<double, STATES, STATES> &Q) { Q_ = Q; }
 
         /**
-         * @brief Define o nível de verbosidade dos logs.
-         * @param verbosity A string de verbosidade ("ALL", "DEBUG", "INFO", "WARNING", "ERROR", "SILENT").
+         * @brief Sets the verbosity level of the logs.
+         * @param verbosity The verbosity string ("ALL", "DEBUG", "INFO", "WARNING", "ERROR", "SILENT").
          */
         void set_verbosity(const std::string &verbosity);
 
         /**
-         * @brief Obtém o nível de verbosidade atual.
-         * @return std::string O nível de verbosidade.
+         * @brief Gets the current verbosity level.
+         * @return std::string The verbosity level.
          */
         std::string get_verbosity() const;
 
         /**
-         * @brief Define os ganhos de ruído do processo.
-         * @param gains Os novos ganhos de ruído do processo.
+         * @brief Sets the process noise gains and updates the Q matrix.
+         * @param gains The struct with the new process noise gains.
          */
         void set_process_noise_gains(const ProcessNoiseGains &gains);
 
         /**
-         * @brief Define os ganhos de ruído da medição.
-         * @param gains Os novos ganhos de ruído da medição.
+         * @brief Sets the measurement noise gains for each sensor.
+         * @param gains The struct with the new measurement noise gains.
          */
         void set_measurement_noise_gains(const MeasurementNoiseGains &gains);
 
+        /**
+         * @brief Calculates a custom attitude error metric from two quaternions.
+         * @details This function calculates the error between the measured and estimated orientation.
+         * The specific formula can be adapted as needed by the control system.
+         * @param q The measured quaternion.
+         * @param q_ref The reference quaternion (estimated by the filter).
+         * @return A 3D error vector representing the attitude difference.
+         */
+        Eigen::Vector3d calculate_custom_attitude_error(const Eigen::Quaterniond &q, const Eigen::Quaterniond &q_ref);
+
     private:
-        // --- MÉTODOS DE CORREÇÃO INTERNOS ---
+        // --- INTERNAL CORRECTION METHODS ---
 
-        /** @brief Corrige o estado usando uma medição de odometria. */
-        void correct_odometry(const nav_msgs::msg::Odometry &odom);
+        /** @brief Corrects the state using a generic odometry measurement. */
+        void correct_odometry(const nav_msgs::msg::Odometry &odom, const ProcessNoiseGains &gains);
 
-        /** @brief Corrige o estado usando uma medição da IMU. */
+        /** @brief Corrects the state using an IMU measurement. */
         void correct_imu(const sensor_msgs::msg::Imu &imu);
 
-        /** @brief Corrige o estado usando uma medição de GPS. */
+        /** @brief Corrects the state using a GPS measurement. */
         void correct_gps(const geometry_msgs::msg::Point &gps);
 
-        // --- MODELO MATEMÁTICO E JACOBIANAS ---
+        // --- MATHEMATICAL MODEL AND JACOBIANS ---
 
         /**
-         * @brief Modelo de transição de estado não-linear do drone.
-         * * Implementa as equações diferenciais que descrevem a física do movimento do drone.
-         * É um método template para poder ser usado com `autodiff::real` para diferenciação automática.
-         * * @param x O vetor de estado atual.
-         * @param u O vetor de controle aplicado.
-         * @return Eigen::Matrix<T, STATES, 1> O vetor com as derivadas do estado (x_dot).
+         * @brief The drone's non-linear state transition model.
+         *
+         * Implements the differential equations describing the physics of the drone's motion.
+         * It is a template method so it can be used with `autodiff::real` for automatic differentiation.
+         *
+         * @tparam T The scalar type (can be `double` or `autodiff::real`).
+         * @param x The current state vector.
+         * @param u The applied control vector (motor forces).
+         * @return The vector of state derivatives (x_dot).
          */
         template <typename T>
         Eigen::Matrix<T, STATES, 1> state_transition_model(const Eigen::Matrix<T, STATES, 1> &x, const Eigen::Matrix<T, INPUTS, 1> &u) const;
 
         /**
-         * @brief Calcula a matriz Jacobiana F (derivada do modelo de transição de estado em relação ao estado).
-         * Utiliza diferenciação automática para evitar o cálculo manual.
-         * * @param x O vetor de estado atual.
-         * @param u O vetor de controle atual.
+         * @brief Calculates the Jacobian matrix F (derivative of the transition model with respect to the state).
+         * It uses automatic differentiation to avoid manual calculation.
+         *
+         * @param x The state vector at which to evaluate the Jacobian.
+         * @param u The control vector at which to evaluate the Jacobian.
          */
         void calculate_jacobian_F(const Eigen::Matrix<double, STATES, 1> &x, const Eigen::Matrix<double, INPUTS, 1> &u);
 
         /**
-         * @brief Funde múltiplas fontes de odometria usando a ponderação pela inversa da variância.
-         * @param measurements O pacote de medições contendo as fontes de odometria.
-         * @return Um std::optional contendo um par com o vetor de medição fundido (z) e
-         * a sua matriz de covariância combinada (R). Retorna um optional vazio se nenhuma
-         * fonte de odometria estiver disponível.
+         * @brief Fuses multiple odometry sources using inverse-variance weighting.
+         *
+         * @param measurements The measurement package containing the odometry sources.
+         * @return An `std::optional` containing a pair of:
+         * - The fused measurement vector (z).
+         * - Its combined covariance matrix (R).
+         * Returns an empty optional if no odometry sources are available.
          */
         std::optional<std::pair<Eigen::Matrix<double, 13, 1>, Eigen::Matrix<double, 13, 13>>> fuse_odometry(const MeasurementPackage &measurements);
 
         /**
-         * @brief Atualiza a matriz de covariância do ruído do processo (Q).
+         * @brief Updates the process noise covariance matrix (Q) based on the defined gains.
          */
         void update_Q_matrix();
 
-        // --- MEMBROS DO FILTRO ---
-        double dt_; ///< Armazena o último intervalo de tempo (dt) para uso na Jacobiana.
+        // --- FILTER MEMBERS ---
+        double dt_; ///< Stores the last time interval (dt) for use in the Jacobian [s].
 
-        // --- PARÂMETROS FÍSICOS ---
-        double mass_;                              ///< Massa do drone [kg].
-        double arm_length_;                        ///< Comprimento do braço do drone [m].
-        double thrust_coefficient_;                ///< Coeficiente de empuxo.
-        double torque_coefficient_;                ///< Coeficiente de torque.
-        Eigen::Matrix3d inertia_tensor_;           ///< Tensor de inércia.
-        Eigen::Matrix3d inertia_tensor_inv_;       ///< Inversa do tensor de inércia (pré-calculada).
-        static constexpr double GRAVITY = 9.80665; ///< Aceleração da gravidade [m/s^2].
+        // --- PHYSICAL PARAMETERS ---
+        double mass_;                                 ///< Drone mass [kg].
+        Eigen::Matrix<double, 4, 2> motor_positions_; ///< (x,y) positions of the motors in the body frame [m].
+        double arm_length_;                           ///< Drone arm length (center to motor) [m].
+        double thrust_coefficient_;                   ///< Thrust coefficient [N/rpm^2].
+        double torque_coefficient_;                   ///< Torque coefficient [Nm/rpm^2].
+        Eigen::Matrix3d inertia_tensor_;              ///< Inertia tensor [kg*m^2].
+        Eigen::Matrix3d inertia_tensor_inv_;          ///< Inverse of the inertia tensor (pre-calculated).
+        static constexpr double GRAVITY = 9.80665;    ///< Acceleration of gravity [m/s^2].
 
-        // --- LOGS E DEPURAÇÃO ---
-        rclcpp::Logger logger_; ///< Logger do ROS2 para mensagens.
-        std::string verbosity_; ///< Nível de log atual como string.
-        bool is_debug_;         ///< Flag booleana para otimizar verificações de log.
+        // --- LOGGING AND DEBUGGING ---
+        rclcpp::Logger logger_; ///< ROS2 logger for displaying messages.
+        std::string verbosity_; ///< Current log level as a string.
+        bool is_debug_;         ///< Boolean flag to optimize real-time log checks.
 
-        ProcessNoiseGains q_gains_;     ///< Ganhos de ruído do processo.
-        MeasurementNoiseGains r_gains_; ///< Ganhos de ruído da medição.
+        ProcessNoiseGains q_gains_;     ///< Gains for the process noise matrix (Q).
+        MeasurementNoiseGains r_gains_; ///< Gains for the measurement noise matrix (R).
     };
 } // namespace laser_uav_lib
 

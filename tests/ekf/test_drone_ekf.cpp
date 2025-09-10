@@ -6,6 +6,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/logging.hpp>
 
+// Defina uma tolerância padrão para as verificações de estabilidade
+constexpr double STATE_TOLERANCE = 1e-9;
+
 // Constantes de teste para os parâmetros do drone
 const double TEST_MASS = 1.60;                             // mass do YAML
 const double TEST_ARM_LENGTH = 0.258;                      // calculado de motors_positions
@@ -13,6 +16,12 @@ const double TEST_THRUST_COEFF = 1.0;                      // precisa ser calcul
 const double TEST_TORQUE_COEFF = TEST_THRUST_COEFF * 0.59; // c_tau do YAML
 const Eigen::Matrix3d TEST_INERTIA =
     Eigen::Vector3d(0.4953, 0.4953, 0.3413).asDiagonal(); // inertia do YAML
+
+const Eigen::Matrix<double, 4, 2> TEST_MOTOR_POSITIONS = (Eigen::Matrix<double, 4, 2>() << 0.185, -0.18, //< Motor 0 (Frontal-Direito)
+                                                          -0.185, 0.18,                                  //< Motor 1 (Traseiro-Esquerdo)
+                                                          0.185, 0.18,                                   //< Motor 2 (Frontal-Esquerdo)
+                                                          -0.185, -0.18)                                 //< Motor 3 (Traseiro-Direito)
+                                                             .finished();
 
 /**
  * @class DroneEKFTest
@@ -36,7 +45,7 @@ protected:
     void SetUp() override
     {
         ekf = std::make_unique<laser_uav_lib::DroneEKF>(
-            TEST_MASS, TEST_ARM_LENGTH, TEST_THRUST_COEFF, TEST_TORQUE_COEFF, TEST_INERTIA, "INFO");
+            TEST_MASS, TEST_MOTOR_POSITIONS, TEST_THRUST_COEFF, TEST_TORQUE_COEFF, TEST_INERTIA, "INFO");
     }
 
     /**
@@ -373,8 +382,8 @@ TEST_F(DroneEKFTest, ForwardMovement)
     double diff = 0.5;
     Eigen::Vector4d u_forward(
         hover_thrust_per_motor - diff,
-        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff,
+        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff);
 
     run_simulation(u_forward, 50, 0.02);
@@ -382,6 +391,13 @@ TEST_F(DroneEKFTest, ForwardMovement)
     EXPECT_GT(state(laser_uav_lib::State::PX), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::VX), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::QY), 0.0);
+
+    EXPECT_NEAR(state(laser_uav_lib::State::PY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::VY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
 }
 
 /**
@@ -396,8 +412,8 @@ TEST_F(DroneEKFTest, BackwardMovement)
     double diff = 0.5;
     Eigen::Vector4d u_backward(
         hover_thrust_per_motor + diff,
-        hover_thrust_per_motor + diff,
         hover_thrust_per_motor - diff,
+        hover_thrust_per_motor + diff,
         hover_thrust_per_motor - diff);
 
     run_simulation(u_backward, 50, 0.02);
@@ -405,6 +421,13 @@ TEST_F(DroneEKFTest, BackwardMovement)
     EXPECT_LT(state(laser_uav_lib::State::PX), 0.0);
     EXPECT_LT(state(laser_uav_lib::State::VX), 0.0);
     EXPECT_LT(state(laser_uav_lib::State::QY), 0.0);
+
+    EXPECT_NEAR(state(laser_uav_lib::State::PY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::VY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
 }
 
 /**
@@ -422,16 +445,23 @@ TEST_F(DroneEKFTest, RightwardMovement)
 
     double diff = 0.5;
     Eigen::Vector4d u_right(
+        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff,
-        hover_thrust_per_motor - diff,
-        hover_thrust_per_motor - diff,
-        hover_thrust_per_motor + diff);
+        hover_thrust_per_motor + diff,
+        hover_thrust_per_motor - diff);
 
     run_simulation(u_right, 50, 0.02);
     const auto &state = ekf->get_state();
     EXPECT_LT(state(laser_uav_lib::State::PY), 0.0);
     EXPECT_LT(state(laser_uav_lib::State::VY), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::QX), 0.0);
+
+    EXPECT_NEAR(state(laser_uav_lib::State::PX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::VX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QY), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
 }
 
 /**
@@ -448,16 +478,23 @@ TEST_F(DroneEKFTest, LeftwardMovement)
     // ekf->set_verbosity("DEBUG");
     double diff = 0.5;
     Eigen::Vector4d u_left(
+        hover_thrust_per_motor + diff,
         hover_thrust_per_motor - diff,
-        hover_thrust_per_motor + diff,
-        hover_thrust_per_motor + diff,
-        hover_thrust_per_motor - diff);
+        hover_thrust_per_motor - diff,
+        hover_thrust_per_motor + diff);
 
     run_simulation(u_left, 50, 0.02);
     const auto &state = ekf->get_state();
     EXPECT_GT(state(laser_uav_lib::State::PY), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::VY), 0.0);
     EXPECT_LT(state(laser_uav_lib::State::QX), 0.0);
+
+    EXPECT_NEAR(state(laser_uav_lib::State::PX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::VX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QY), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
 }
 
 // // =============================================================================
@@ -473,21 +510,65 @@ TEST_F(DroneEKFTest, LeftwardMovement)
  */
 TEST_F(DroneEKFTest, YawRotation)
 {
-    ekf->set_verbosity("SILENT");
+    // ekf->set_verbosity("SILENT");
     // ekf->set_verbosity("INFO");
-    // ekf->set_verbosity("DEBUG");
+    ekf->set_verbosity("DEBUG");
     double diff = 0.1;
     Eigen::Vector4d u_yaw(
-        hover_thrust_per_motor - diff,
+        hover_thrust_per_motor + diff,
         hover_thrust_per_motor + diff,
         hover_thrust_per_motor - diff,
-        hover_thrust_per_motor + diff);
+        hover_thrust_per_motor - diff);
 
-    run_simulation(u_yaw, 50, 0.02);
+    run_simulation(u_yaw, 500, 0.01);
     const auto &state = ekf->get_state();
 
     EXPECT_GT(state(laser_uav_lib::State::WZ), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::QZ), 0.0);
+
+    // EXPECT_NEAR(state(laser_uav_lib::State::PX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QY), 0.0, STATE_TOLERANCE);
+}
+
+/**
+ * @test YawRotation
+ * @brief Testa a rotação em torno do eixo Z (guinada).
+ * * Aplica um comando diferencial que gera um torque de guinada (yaw). Verifica se
+ * a velocidade angular em Z (WZ) se torna positiva e se o ângulo de guinada,
+ * extraído do quaternião final, também é positivo.
+ */
+TEST_F(DroneEKFTest, TwoYawRotation)
+{
+    // ekf->set_verbosity("SILENT");
+    ekf->set_verbosity("INFO");
+    // ekf->set_verbosity("DEBUG");
+    double diff = 0.1;
+    Eigen::Vector4d u_yaw(
+        hover_thrust_per_motor - diff,
+        hover_thrust_per_motor - diff,
+        hover_thrust_per_motor + diff,
+        hover_thrust_per_motor + diff);
+
+    run_simulation(u_yaw, 300, 0.01);
+    const auto &state = ekf->get_state();
+
+    EXPECT_LT(state(laser_uav_lib::State::WZ), 0.0);
+    EXPECT_LT(state(laser_uav_lib::State::QZ), 0.0);
+
+    // EXPECT_NEAR(state(laser_uav_lib::State::PX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VX), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VY), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QY), 0.0, STATE_TOLERANCE);
 }
 
 /**
@@ -505,14 +586,21 @@ TEST_F(DroneEKFTest, PitchRotation)
     double diff = 0.2;
     Eigen::Vector4d u_pitch(
         hover_thrust_per_motor - diff,
-        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff,
+        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff);
 
     run_simulation(u_pitch, 50, 0.02);
     const auto &state = ekf->get_state();
     EXPECT_GT(state(laser_uav_lib::State::WY), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::QY), 0.0);
+
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::WX), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::WZ), 0.0, STATE_TOLERANCE);
 }
 
 /**
@@ -529,15 +617,22 @@ TEST_F(DroneEKFTest, RollRotation)
     // ekf->set_verbosity("DEBUG");
     double diff = 0.2;
     Eigen::Vector4d u_roll(
+        hover_thrust_per_motor - diff,
         hover_thrust_per_motor + diff,
-        hover_thrust_per_motor - diff,
-        hover_thrust_per_motor - diff,
-        hover_thrust_per_motor + diff);
+        hover_thrust_per_motor + diff,
+        hover_thrust_per_motor - diff);
 
     run_simulation(u_roll, 50, 0.02);
     const auto &state = ekf->get_state();
     EXPECT_GT(state(laser_uav_lib::State::WX), 0.0);
     EXPECT_GT(state(laser_uav_lib::State::QX), 0.0);
+
+    // EXPECT_NEAR(state(laser_uav_lib::State::PZ), 0.0, STATE_TOLERANCE);
+    // EXPECT_NEAR(state(laser_uav_lib::State::VZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QY), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::QZ), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::WY), 0.0, STATE_TOLERANCE);
+    EXPECT_NEAR(state(laser_uav_lib::State::WZ), 0.0, STATE_TOLERANCE);
 }
 
 // // =============================================================================

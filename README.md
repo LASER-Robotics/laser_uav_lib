@@ -42,31 +42,21 @@ Before building, ensure you have the following dependencies installed on your sy
     sudo apt-get install libeigen3-dev
     ```
   - **Autodiff**: A C++ library for automatic differentiation.
-    ```bash
-    # Enter the folder
+
+    ```sh
+    cd /tmp
+    echo "set -e
+    mkdir -p ~/git
     cd ~/git/
-    
-    # Clone the repository from GitHub
     git clone https://github.com/autodiff/autodiff.git
-    
-    # Enter the created directory
     cd autodiff
-    
-    # Create a separate build directory (best practice)
-    mkdir build
-    
-    # Enter the build directory
-    cd build
-    
-    # Configure the build with CMake
-    cmake ..
-    
-    # Compile the code using multiple cores
-    make -j
-    
-    # Install the library system-wide (requires admin privileges)
-    sudo make install
+    mkdir -p build && cd build
+    cmake .. -DAUTODIFF_BUILD_PYTHON=OFF
+    cmake --build . -- -j
+    sudo cmake --install .
+    echo 'Biblioteca autodiff compilada e instalada com sucesso!'" > run.sh && source run.sh
     ```
+
 ## Building and Testing
 
 To build the library and run the tests, clone the repository into your ROS 2 workspace and use `colcon`:

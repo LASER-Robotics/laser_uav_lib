@@ -1,29 +1,104 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+
+<!--
+/**
+ * @file package.xml
+ * @brief ROS2 package configuration for laser_uav_lib
+ * @author Wagner Dantas Garcia
+ * @email wagnergarcia@eng.ci.ufpb.br
+ * @date 2025
+ * @copyright Apache License 2.0
+ * 
+ * @details This package.xml file defines the configuration for the laser_uav_lib ROS2 package,
+ * which provides core functionalities for Unmanned Aerial Vehicle (UAV) operations within the
+ * LASER Robotics framework. The package includes essential utilities, data structures, and
+ * algorithms for UAV control, navigation, and sensor data processing.
+ * 
+ * Key Features:
+ * - Core UAV functionality library
+ * - ROS2 message handling utilities
+ * - Geometric transformations for navigation
+ * - Sensor data processing capabilities
+ * - Integration with tf2 transformation library
+ * - Support for Eigen3 mathematical operations
+ * 
+ * Dependencies:
+ * - ROS2 Humble or later
+ * - Eigen3 library for linear algebra operations
+ * - Standard ROS2 message packages
+ * 
+ * @note This package follows ROS2 package format 3 specifications
+ * @see
+https://docs.ros.org/en/humble/Tutorials/Beginner-Client-Libraries/Creating-Your-First-ROS2-Package.html
+ */
+-->
+
 <package format="3">
+  <!-- Package identification -->
   <name>laser_uav_lib</name>
   <version>0.0.0</version>
-  <description>A library for UAV core functionalities</description>
+  <description>A comprehensive library for UAV core functionalities including navigation, control
+    utilities, and sensor data processing within the LASER Robotics framework</description>
+
+  <!-- Package maintainer information -->
   <maintainer email="wagnergarcia@eng.ci.ufpb.br">Wagner Dantas Garcia</maintainer>
+
+  <!-- License information -->
   <license>Apache License 2.0</license>
+
+  <!-- Build tool dependencies -->
+  <!-- ament_cmake: CMake-based build system for ROS2 packages -->
   <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <!-- Core ROS2 C++ client library for node creation and communication -->
   <depend>rclcpp</depend>
+
+  <!-- Standard ROS2 message types (Int32, String, Header, etc.) -->
   <depend>std_msgs</depend>
+
+  <!-- Geometric message types (Point, Pose, Twist, Transform, etc.) -->
   <depend>geometry_msgs</depend>
+
+  <!-- Navigation-related message types (Odometry, Path, OccupancyGrid, etc.) -->
   <depend>nav_msgs</depend>
+
+  <!-- Sensor data message types (Image, PointCloud, IMU, LaserScan, etc.) -->
   <depend>sensor_msgs</depend>
+
+  <!-- TF2 library for coordinate frame transformations -->
   <depend>tf2_ros</depend>
+
+  <!-- TF2 utilities for geometry message transformations -->
   <depend>tf2_geometry_msgs</depend>
+
+  <!-- CMake module for finding and configuring Eigen3 library -->
   <depend>eigen3_cmake_module</depend>
-  <build_export_depend>libeigen3-dev</build_export_depend>
+
+  <!-- Eigen3 linear algebra library dependencies -->
+  <!-- Build-time dependency for Eigen3 development headers -->
   <build_depend>libeigen3-dev</build_depend>
+
+  <!-- Export dependency for packages that depend on this one -->
+  <build_export_depend>libeigen3-dev</build_export_depend>
+
+  <!-- Runtime dependency for Eigen3 library -->
   <exec_depend>libeigen3-dev</exec_depend>
-  <build_depend>libautodiff-dev</build_depend>
-  <exec_depend>libautodiff-dev</exec_depend>
+
+  <!-- Testing dependencies -->
+  <!-- Automatic linting tools for code quality checks -->
   <test_depend>ament_lint_auto</test_depend>
+
+  <!-- Common linting tools (cpplint, uncrustify, etc.) -->
   <test_depend>ament_lint_common</test_depend>
+
+  <!-- Google Test framework integration for unit testing -->
   <test_depend>ament_cmake_gtest</test_depend>
+
+  <!-- Package export configuration -->
   <export>
+    <!-- Specify that this package uses ament_cmake build system -->
     <build_type>ament_cmake</build_type>
   </export>
 </package>

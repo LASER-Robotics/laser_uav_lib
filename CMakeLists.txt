@@ -136,6 +136,14 @@ target_include_directories(ekf PUBLIC
 ament_target_dependencies(ekf ${common_dependencies})
 target_link_libraries(ekf Eigen3::Eigen)
 
+# --- IMU Propagator Library ---
+add_library(imu_propagator src/kalman_filter/imu_propagator/imu_propagator.cpp)
+target_include_directories(imu_propagator PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(imu_propagator ${common_dependencies})
+target_link_libraries(imu_propagator Eigen3::Eigen)
 
 # =============================================================================
 # SECTION 2: MAIN AGGREGATE LIBRARY
@@ -161,6 +169,7 @@ target_link_libraries(${PROJECT_NAME} INTERFACE
   imu_filter
   attitude_converter
   ekf
+  imu_propagator
 )
 
 # =============================================================================
@@ -178,6 +187,7 @@ set(component_libraries
   imu_filter
   attitude_converter
   ekf
+  imu_propagator
   ${PROJECT_NAME}
 )
 

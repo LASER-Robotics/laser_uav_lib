@@ -22,7 +22,7 @@ void RMSE::reset() {
 std::pair<double, double> RMSE::calculate() {
   if (estimated_.empty() || estimated_.size() != reference_.size()) {
     std::cout << "[RMSE] Metric calculation failed: reference and estimated sets have different sizes." << std::endl;
-    return {0.0, 0.0};
+    return {-1.0, -1.0};
   }
 
   tree = laser_uav_lib::KDTree(reference_);

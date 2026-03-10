@@ -1,53 +1,12 @@
-# =============================================================================
-# @file CMakeLists.txt
-# @brief Build script for the laser_uav_lib package.
-# @author Wagner Dantas Garcia / Laser UAV Team
-# @date September 16, 2025
-# =============================================================================
-
-# =============================================================================
-# Project Definition and CMake Version
-#
-# Specifies the minimum version of CMake required to build this project and
-# declares the project name. The project name is used for variables like
-# ${PROJECT_NAME} and in IDEs.
-# =============================================================================
 cmake_minimum_required(VERSION 3.8)
 project(laser_uav_lib)
 
-# =============================================================================
-# Compiler Options
-#
-# Sets compiler flags to improve code quality and catch potential issues early.
-# -Wall: Enables all standard compiler warnings.
-# -Wextra: Enables additional, more stringent warnings.
-# -Wpedantic: Enforces strict ISO C++ compliance.
-# These options are applied only for GCC (GNUCXX) and Clang compilers.
-# =============================================================================
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# =============================================================================
-# Position Independent Code (PIC)
-#
-# This is crucial for creating shared libraries (.so files). It ensures that
-# the generated machine code can be loaded at any address in memory, which is
-# a requirement for libraries linked by other components in ROS 2.
-# =============================================================================
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# =============================================================================
-# Dependency Discovery
-#
-# Uses `find_package` to locate and configure all required dependencies.
-# This makes their headers and libraries available for linking.
-# - ament_cmake: Core build tools for ROS 2.
-# - rclcpp: The ROS 2 C++ client library.
-# - std_msgs, geometry_msgs, nav_msgs, sensor_msgs: Common ROS message types.
-# - tf2_ros, tf2_geometry_msgs: The transform library for ROS.
-# - Eigen3: A C++ template library for linear algebra.
-# =============================================================================
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -58,12 +17,6 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-# =============================================================================
-# Common Dependencies Variable
-#
-# A variable holding a list of all commonly used ROS dependencies.
-# This avoids repetition and makes the file cleaner and easier to maintain.
-# =============================================================================
 set(common_dependencies
   rclcpp
   std_msgs
@@ -72,117 +25,40 @@ set(common_dependencies
   sensor_msgs
   tf2_ros
   tf2_geometry_msgs
-  Eigen3
 )
 
-# =============================================================================
-# SECTION 1: INDIVIDUAL COMPONENT LIBRARY DEFINITIONS
-#
-# This section defines each functional part of the project as a separate,
-# modular library. This approach improves organization and reusability.
-# =============================================================================
+macro(add_laser_component TARGET_NAME SOURCE_FILE)
+  add_library(${TARGET_NAME} ${SOURCE_FILE})
+  target_include_directories(${TARGET_NAME} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  )
+  ament_target_dependencies(${TARGET_NAME} ${common_dependencies})
+  
+  if(${ARGC} GREATER 2)
+    target_link_libraries(${TARGET_NAME} ${ARGN})
+  endif()
+  
+  list(APPEND component_libraries ${TARGET_NAME})
+endmacro()
 
-# --- IRR Filter Library ---
-# Creates a shared library named 'irr_filter'.
-add_library(irr_filter src/filter/irr_filter.cpp)
-# Specifies the include directories.
-# - $<BUILD_INTERFACE:...> makes headers available during the build of this package.
-# - $<INSTALL_INTERFACE:...> makes headers available to other packages that use this one.
-# - PUBLIC: Applies these directories to this library and any other target that links to it.
-target_include_directories(irr_filter PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-# Links the library against its ROS dependencies using the ament macro.
-ament_target_dependencies(irr_filter ${common_dependencies})
-# Links against the non-ament dependency Eigen.
-target_link_libraries(irr_filter Eigen3::Eigen)
+add_laser_component(irr_filter src/filter/irr_filter.cpp Eigen3::Eigen)
+add_laser_component(notch_filter src/filter/notch_filter.cpp irr_filter)
+add_laser_component(imu_filter src/filter/imu_filter.cpp notch_filter)
+add_laser_component(attitude_converter src/attitude_converter/attitude_converter.cpp Eigen3::Eigen)
+add_laser_component(ekf src/kalman_filter/ekf/ekf.cpp Eigen3::Eigen)
+add_laser_component(rmse src/metrics/rmse.cpp)
+add_laser_component(kdtree src/data_structure/kdtree.cpp)
 
-# --- Notch Filter Library ---
-add_library(notch_filter src/filter/notch_filter.cpp)
-target_include_directories(notch_filter PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(notch_filter ${common_dependencies})
-# The notch filter depends on the IRR filter, so we link them.
-target_link_libraries(notch_filter irr_filter)
-
-# --- IMU Filter Library ---
-add_library(imu_filter src/filter/imu_filter.cpp)
-target_include_directories(imu_filter PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(imu_filter ${common_dependencies})
-# The IMU filter depends on the notch filter.
-target_link_libraries(imu_filter notch_filter)
-
-# --- Attitude Converter Library ---
-add_library(attitude_converter src/attitude_converter/attitude_converter.cpp)
-target_include_directories(attitude_converter PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(attitude_converter ${common_dependencies})
-target_link_libraries(attitude_converter Eigen3::Eigen)
-
-# --- EKF Base Library ---
-add_library(ekf src/kalman_filter/ekf/ekf.cpp)
-target_include_directories(ekf PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(ekf ${common_dependencies})
-target_link_libraries(ekf Eigen3::Eigen)
-
-
-# =============================================================================
-# SECTION 2: MAIN AGGREGATE LIBRARY
-#
-# Defines a single "INTERFACE" library that bundles all the component libraries.
-# An INTERFACE library doesn't compile any sources itself; it's a convenient
-# way to group usage requirements (includes, dependencies) for other targets.
-# Another package can simply link against `${PROJECT_NAME}` to get all components.
-# =============================================================================
 add_library(${PROJECT_NAME} INTERFACE)
-
-# The main library also exposes the include directories.
 target_include_directories(${PROJECT_NAME} INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(${PROJECT_NAME} INTERFACE ${component_libraries})
 
-# Links the main interface library to all the component libraries. Any target
-# linking against `${PROJECT_NAME}` will automatically link against these.
-target_link_libraries(${PROJECT_NAME} INTERFACE
-  irr_filter
-  notch_filter
-  imu_filter
-  attitude_converter
-  ekf
-)
+list(APPEND component_libraries ${PROJECT_NAME})
 
-# =============================================================================
-# SECTION 3: INSTALLATION AND EXPORT
-#
-# This section handles installing the built targets (libraries, executables)
-# and header files, and exporting the package information so that other
-# ROS 2 packages can find and use it with `find_package`.
-# =============================================================================
-
-# A list of all library targets to be installed.
-set(component_libraries
-  irr_filter
-  notch_filter
-  imu_filter
-  attitude_converter
-  ekf
-  ${PROJECT_NAME}
-)
-
-# Installs the compiled library files and creates an export set named
-# 'export_${PROJECT_NAME}'.
 install(
   TARGETS ${component_libraries}
   EXPORT export_${PROJECT_NAME}
@@ -191,51 +67,29 @@ install(
   RUNTIME DESTINATION bin
 )
 
-# Installs the public header files from the 'include/' directory.
 install(
   DIRECTORY include/
   DESTINATION include
 )
 
-# The `ament_export_*` functions generate the necessary files (`.cmake`)
-# in the install directory so other packages can use this one.
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(${common_dependencies} Eigen3)
 ament_export_include_directories(include)
 
-# =============================================================================
-# SECTION 4: TEST CONFIGURATION
-#
-# Defines the build targets for tests. This block is only processed if
-# tests are enabled (e.g., via `colcon test`).
-# =============================================================================
 if(BUILD_TESTING)
-  # Find GTest and linting tools.
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 
-  # Defines a GTest executable for the 'irr_filter' library.
-  ament_add_gtest(test_irr_filter tests/filter/test_irr_filter.cpp)
-  ament_target_dependencies(test_irr_filter ${common_dependencies})
-  target_link_libraries(test_irr_filter irr_filter)
+  macro(add_laser_test TEST_NAME SOURCE_FILE LINK_LIB)
+    ament_add_gtest(${TEST_NAME} ${SOURCE_FILE})
+    ament_target_dependencies(${TEST_NAME} ${common_dependencies})
+    target_link_libraries(${TEST_NAME} ${LINK_LIB})
+  endmacro()
 
-  # Defines a GTest executable for the 'notch_filter' library.
-  ament_add_gtest(test_notch_filter tests/filter/test_notch_filter.cpp)
-  ament_target_dependencies(test_notch_filter ${common_dependencies})
-  target_link_libraries(test_notch_filter notch_filter)
-
-  # Defines a GTest executable for the 'imu_filter' library.
-  ament_add_gtest(test_imu_filter tests/filter/test_imu_filter.cpp)
-  ament_target_dependencies(test_imu_filter ${common_dependencies})
-  target_link_libraries(test_imu_filter imu_filter)
+  add_laser_test(test_irr_filter tests/filter/test_irr_filter.cpp irr_filter)
+  add_laser_test(test_notch_filter tests/filter/test_notch_filter.cpp notch_filter)
+  add_laser_test(test_imu_filter tests/filter/test_imu_filter.cpp imu_filter)
 endif()
 
-# =============================================================================
-# Finalization
-#
-# This is a mandatory macro call for all ament packages. It registers the
-# package with the build system and finalizes the configuration. It must be
-# the last command in the file.
-# =============================================================================
 ament_package()

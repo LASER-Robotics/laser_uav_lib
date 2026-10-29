@@ -1,83 +1,58 @@
 # LASER UAV Library
 
-This package provides **C++ classes** and **utilities** designed for core functionalities of the Laser UAV System (LUS). It serves as a foundational library for signal filtering, attitude representation, and Kalman filtering.
+`laser_uav_lib` contains the C++ utilities shared by the LASER UAV System (LUS): signal filters, attitude conversions, Kalman filtering, error metrics and a k-d tree.
 
-## Overview and Modules
+Other packages link these components into their nodes. The library has no ROS topics, services, launch files or parameter YAML of its own.
 
-The main objective of this package is to provide optimized, modular, and testable components that can be easily integrated into other ROS 2 nodes.
+## Components
 
-### Signal Filtering
--   **Description:** A comprehensive suite of signal processing tools designed to condition sensor data. It includes an **IMU Filter** container that chains configurable **IIR (Infinite Impulse Response)** and **Notch filters**. These are crucial for removing motor-induced vibrations and high-frequency noise from accelerometer and gyroscope readings before they reach the estimators or controllers.
+| Component | Header | Role |
+| --- | --- | --- |
+| `IIRFilter` | `laser_uav_lib/filter/irr_filter.hpp` | Filters scalar samples using feedback and feedforward coefficients. The filename uses `irr`. |
+| `NotchFilter` | `laser_uav_lib/filter/notch_filter.hpp` | Attenuates a selected frequency band. |
+| `ImuFilter` | `laser_uav_lib/filter/imu_filter.hpp` | Applies IIR and notch filters to the accelerometer and gyroscope axes. |
+| `AttitudeConverter` | `laser_uav_lib/attitude_converter/attitude_converter.hpp` | Converts between Euler angles, quaternions and rotation matrices, including Eigen, TF2 and ROS message types. |
+| `EKF` | `laser_uav_lib/kalman_filter/ekf/ekf.hpp` | Extended Kalman filter template with prediction, correction and model/Jacobian hooks. |
+| RMSE utilities | `laser_uav_lib/metrics/rmse.hpp` | Tracking-error statistics. |
+| K-d tree | `laser_uav_lib/data_structure/kdtree.hpp` | Spatial searches over three-dimensional points. |
 
--   **Provided Classes:**
-    -   `ImuFilter`: Main interface for filtering 6-DOF IMU data.
-    -   `NotchFilter`: Removes specific frequency bands (e.g., motor noise).
-    -   `IIRFilter`: Generic low-pass/high-pass filter implementation.
+### Signal filters
 
--   **Code Example:**
-    ```cpp
-    #include <laser_uav_lib/filter/imu_filter.hpp>
+Construct `IIRFilter` with coefficient vectors `a` and `b`, then call `iterate()` for each sample. `a` contains the feedback coefficients and `b` the feedforward coefficients. Choose coefficients for the actual sampling rate.
 
-    // Configure notch filter to remove 50Hz noise
-    Eigen::MatrixXd notch_freqs(1, 1);
-    notch_freqs(0, 0) = 50.0; 
+`ImuFilter` takes separate accelerometer and gyroscope settings: enable flags, IIR coefficients, notch sampling rates, frequencies and bandwidths. It accepts and returns `ImuData`; `filterAccelerometer()` and `filterGyro()` are available for separate streams. The ROS wrapper and its parameter descriptions are in `laser_uav_imu_filter`.
 
-    // Initialize filter (enabled flags, coefficients, sampling rates)
-    laser_uav_lib::ImuFilter filter(
-        true, iir_a, iir_b,              // Accelerometer IIR
-        true, 100.0, notch_freqs, 5.0,   // Accelerometer Notch
-        true, iir_a, iir_b,              // Gyroscope IIR
-        true, 100.0, notch_freqs, 5.0    // Gyroscope Notch
-    );
+### Attitude conversion
 
-    auto clean_data = filter.filter(raw_imu_data);
-    ```
+```cpp
+#include <laser_uav_lib/attitude_converter/attitude_converter.hpp>
 
-### Attitude Converter
--   **Description:** A robust utility class meant to solve the common headache of converting between different 3D rotation representations in ROS 2. It supports seamless casting between **Quaternions** (Eigen, `tf2`, `geometry_msgs`), **Euler Angles** (Intrinsic/Extrinsic), and **Rotation Matrices**. It also provides utilities for calculating heading, directional vectors, and yaw rates.
+// Initialize from roll, pitch and yaw in radians.
+laser_uav_lib::AttitudeConverter state(0.1, 0.0, 1.57);
 
--   **Key Features:**
-    -   Automatic type casting between Eigen, TF2, and ROS messages.
-    -   Safe handling of singularities (gimbal lock).
-    -   Heading and vector extraction.
+double current_heading = state.getHeading();
+geometry_msgs::msg::Quaternion ros_msg = state;
+Eigen::Quaterniond eigen_q = state;
+```
 
--   **Code Example:**
-    ```cpp
-    #include <laser_uav_lib/attitude_converter/attitude_converter.hpp>
+### Kalman filtering
 
-    // Initialize from Roll, Pitch, Yaw
-    laser_uav_lib::AttitudeConverter state(0.1, 0.0, 1.57);
+`EKF<States, Inputs, Measurements>` provides `predict()`, `correct()`, `get_state()` and `get_covariance()`. A derived filter supplies its state-transition model, measurement model and Jacobians. The vehicle-specific estimators used by LUS are in `laser_uav_estimators`.
 
-    // Get current heading
-    double current_heading = state.getHeading();
+## Build and use
 
-    // Convert directly to ROS message or Eigen
-    geometry_msgs::msg::Quaternion ros_msg = state;
-    Eigen::Quaterniond eigen_q = state;
-    ```
+From the workspace root:
 
-### Kalman Filter Framework
--   **Description:** A template-based **Extended Kalman Filter (EKF)** implementation. It provides a flexible architecture where state transition models, measurement models, and Jacobian calculations can be overridden. This allows for rapid development of custom state estimators for specific UAV applications without rewriting the core filter logic.
+```bash
+colcon build --packages-up-to laser_uav_lib
+source install/setup.bash
+```
 
--   **Code Example:**
-    ```cpp
-    #include <laser_uav_lib/kalman_filter/ekf/ekf.hpp>
+Add `<depend>laser_uav_lib</depend>` to your package's `package.xml`. In `CMakeLists.txt`, find the package and link your existing target:
 
-    // Define an EKF with 13 States, 4 Inputs, and 6 Measurements
-    class MyDroneEstimator : public laser_uav_lib::EKF<13, 4, 6> {
-        void state_transition_model(...) override {
-            // Implement system dynamics here
-        }
-    };
-    ```
+```cmake
+find_package(laser_uav_lib REQUIRED)
+target_link_libraries(your_target laser_uav_lib)
+```
 
-## Integration Guide
-
-To use this library in your ROS 2 package:
-
-1.  **package.xml**: Add `<depend>laser_uav_lib</depend>`.
-2.  **CMakeLists.txt**:
-    ```cmake
-    find_package(laser_uav_lib REQUIRED)
-    target_link_libraries(your_target laser_uav_lib)
-    ```
+The exported `laser_uav_lib` target links all components. Individual targets include `irr_filter`, `notch_filter`, `imu_filter`, `attitude_converter`, `ekf`, `rmse` and `kdtree`.
